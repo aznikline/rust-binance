@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 description = "A python-binance-inspired async Rust client for Binance Spot REST APIs"
 license = "MIT"
-repository = "https://github.com/wizout/python-binance-rs"
+repository = "https://github.com/aznikline/rust-binance"
 
 [dependencies]
 hex = "0.4"
