@@ -8,9 +8,11 @@ use sha2::Sha256;
 
 use crate::error::{BinanceApiError, Error};
 use crate::types::{
-    AccountInformation, AggregateTrade, AggregateTradeRequest, AveragePrice, BookTicker,
-    CancelOrderRequest, CreateOrderRequest, ExchangeInfo, Kline, KlinesRequest, OrderBook,
-    OrderQueryRequest, OrderResponse, PriceTicker, ServerTimeResponse, Ticker24hr, ToParams, Trade,
+    AccountBalance, AccountInformation, AccountTrade, AggregateTrade, AggregateTradeRequest,
+    AllOrdersRequest, AveragePrice, BookTicker, CancelOrderRequest, CreateOrderRequest,
+    ExchangeInfo, Kline, KlinesRequest, MyTradesRequest, OrderBook, OrderCountUsage,
+    OrderListSummary, OrderQueryRequest, OrderResponse, PriceTicker, ServerTimeResponse,
+    Ticker24hr, ToParams, Trade,
 };
 
 type HmacSha256 = Hmac<Sha256>;
@@ -182,6 +184,37 @@ impl BinanceClient {
 
     pub async fn account(&self) -> Result<AccountInformation, Error> {
         self.send_signed(Method::GET, "/api/v3/account", Vec::new())
+            .await
+    }
+
+    pub async fn asset_balance(&self, asset: &str) -> Result<Option<AccountBalance>, Error> {
+        let account = self.account().await?;
+        Ok(account
+            .balances
+            .into_iter()
+            .find(|balance| balance.asset == asset))
+    }
+
+    pub async fn all_orders(
+        &self,
+        request: &AllOrdersRequest,
+    ) -> Result<Vec<OrderResponse>, Error> {
+        self.send_signed(Method::GET, "/api/v3/allOrders", request.to_params())
+            .await
+    }
+
+    pub async fn my_trades(&self, request: &MyTradesRequest) -> Result<Vec<AccountTrade>, Error> {
+        self.send_signed(Method::GET, "/api/v3/myTrades", request.to_params())
+            .await
+    }
+
+    pub async fn current_order_count(&self) -> Result<Vec<OrderCountUsage>, Error> {
+        self.send_signed(Method::GET, "/api/v3/rateLimit/order", Vec::new())
+            .await
+    }
+
+    pub async fn open_order_lists(&self) -> Result<Vec<OrderListSummary>, Error> {
+        self.send_signed(Method::GET, "/api/v3/openOrderList", Vec::new())
             .await
     }
 

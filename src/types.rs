@@ -130,6 +130,55 @@ pub struct AccountBalance {
     pub locked: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountTrade {
+    pub symbol: String,
+    pub id: u64,
+    pub order_id: u64,
+    pub order_list_id: i64,
+    pub price: String,
+    pub qty: String,
+    pub quote_qty: String,
+    pub commission: String,
+    pub commission_asset: String,
+    pub time: u64,
+    pub is_buyer: bool,
+    pub is_maker: bool,
+    pub is_best_match: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrderCountUsage {
+    pub rate_limit_type: String,
+    pub interval: String,
+    pub interval_num: u64,
+    pub limit: u64,
+    pub count: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrderListOrder {
+    pub symbol: String,
+    pub order_id: u64,
+    pub client_order_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrderListSummary {
+    pub order_list_id: u64,
+    pub contingency_type: String,
+    pub list_status_type: String,
+    pub list_order_status: String,
+    pub list_client_order_id: String,
+    pub transaction_time: u64,
+    pub symbol: String,
+    pub orders: Vec<OrderListOrder>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderResponse {
@@ -275,6 +324,25 @@ pub struct AggregateTradeRequest {
     pub limit: Option<u16>,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct AllOrdersRequest {
+    pub symbol: String,
+    pub order_id: Option<u64>,
+    pub start_time: Option<u64>,
+    pub end_time: Option<u64>,
+    pub limit: Option<u16>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct MyTradesRequest {
+    pub symbol: String,
+    pub order_id: Option<u64>,
+    pub start_time: Option<u64>,
+    pub end_time: Option<u64>,
+    pub from_id: Option<u64>,
+    pub limit: Option<u16>,
+}
+
 impl AggregateTradeRequest {
     pub fn new(symbol: impl Into<String>) -> Self {
         Self {
@@ -324,6 +392,117 @@ impl AggregateTradeRequest {
     pub fn limit_opt(mut self, value: Option<u16>) -> Self {
         self.limit = value;
         self
+    }
+}
+
+impl AllOrdersRequest {
+    pub fn new(symbol: impl Into<String>) -> Self {
+        Self {
+            symbol: symbol.into(),
+            order_id: None,
+            start_time: None,
+            end_time: None,
+            limit: None,
+        }
+    }
+
+    pub fn order_id(mut self, value: u64) -> Self {
+        self.order_id = Some(value);
+        self
+    }
+
+    pub fn start_time(mut self, value: u64) -> Self {
+        self.start_time = Some(value);
+        self
+    }
+
+    pub fn end_time(mut self, value: u64) -> Self {
+        self.end_time = Some(value);
+        self
+    }
+
+    pub fn limit(mut self, value: u16) -> Self {
+        self.limit = Some(value);
+        self
+    }
+}
+
+impl ToParams for AllOrdersRequest {
+    fn to_params(&self) -> Vec<(String, String)> {
+        let mut params = vec![("symbol".to_string(), self.symbol.clone())];
+        if let Some(value) = self.order_id {
+            params.push(("orderId".to_string(), value.to_string()));
+        }
+        if let Some(value) = self.start_time {
+            params.push(("startTime".to_string(), value.to_string()));
+        }
+        if let Some(value) = self.end_time {
+            params.push(("endTime".to_string(), value.to_string()));
+        }
+        if let Some(value) = self.limit {
+            params.push(("limit".to_string(), value.to_string()));
+        }
+        params
+    }
+}
+
+impl MyTradesRequest {
+    pub fn new(symbol: impl Into<String>) -> Self {
+        Self {
+            symbol: symbol.into(),
+            order_id: None,
+            start_time: None,
+            end_time: None,
+            from_id: None,
+            limit: None,
+        }
+    }
+
+    pub fn order_id(mut self, value: u64) -> Self {
+        self.order_id = Some(value);
+        self
+    }
+
+    pub fn start_time(mut self, value: u64) -> Self {
+        self.start_time = Some(value);
+        self
+    }
+
+    pub fn end_time(mut self, value: u64) -> Self {
+        self.end_time = Some(value);
+        self
+    }
+
+    pub fn from_id(mut self, value: u64) -> Self {
+        self.from_id = Some(value);
+        self
+    }
+
+    pub fn limit(mut self, value: u16) -> Self {
+        self.limit = Some(value);
+        self
+    }
+}
+
+impl ToParams for MyTradesRequest {
+    fn to_params(&self) -> Vec<(String, String)> {
+        let mut params = vec![("symbol".to_string(), self.symbol.clone())];
+        if let Some(value) = self.order_id {
+            params.push(("orderId".to_string(), value.to_string()));
+        }
+        if let Some(value) = self.start_time {
+            params.push(("startTime".to_string(), value.to_string()));
+        }
+        if let Some(value) = self.end_time {
+            params.push(("endTime".to_string(), value.to_string()));
+        }
+        if let Some(value) = self.from_id {
+            params.push(("fromId".to_string(), value.to_string()));
+        }
+        if let Some(value) = self.limit {
+            params.push(("limit".to_string(), value.to_string()));
+        }
+        params
     }
 }
 

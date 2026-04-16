@@ -25,6 +25,11 @@ This repository focuses on the most valuable Spot REST surface first instead of 
   - `ui_klines`
 - Signed REST endpoints
   - `account`
+  - `asset_balance`
+  - `all_orders`
+  - `my_trades`
+  - `current_order_count`
+  - `open_order_lists`
   - `open_orders`
   - `create_order`
   - `cancel_order`
