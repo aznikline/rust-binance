@@ -24,6 +24,8 @@ pub enum Error {
     #[error(transparent)]
     Http(#[from] reqwest::Error),
     #[error(transparent)]
+    Websocket(#[from] tokio_tungstenite::tungstenite::Error),
+    #[error(transparent)]
     Json(#[from] serde_json::Error),
     #[error(transparent)]
     Api(BinanceApiError),

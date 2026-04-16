@@ -1,6 +1,7 @@
 mod client;
 mod error;
 mod types;
+mod ws;
 
 pub use client::{BinanceClient, BinanceClientBuilder};
 pub use error::{BinanceApiError, Error};
@@ -13,4 +14,10 @@ pub use types::{
     OrderCountUsage, OrderListOrder, OrderListQueryRequest, OrderListSummary, OrderQueryRequest,
     OrderResponse, OrderSide, OrderType, PreventedMatch, PreventedMatchesRequest, PriceTicker,
     ServerTimeResponse, SymbolFilters, Ticker24hr, TimeInForce, ToParams, Trade,
+};
+pub use ws::{
+    BalanceUpdateEvent, BinanceWebsocketClient, BinanceWebsocketClientBuilder, BookTickerStreamEvent,
+    CombinedStream, ExecutionReportEvent, KlinePayload, KlineStreamEvent, ListStatusEvent,
+    ListStatusOrder, OutboundAccountPositionEvent, TradeStreamEvent, UserBalance, UserDataEvent,
+    WsConnection,
 };

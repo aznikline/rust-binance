@@ -46,6 +46,10 @@ This repository focuses on the most valuable Spot REST surface first instead of 
   - `get_order`
 - Binance-compatible request signing
 - Async `reqwest` transport with `rustls`
+- Spot websocket support
+  - raw and combined market stream URL builders
+  - websocket connection helpers
+  - typed parsing for trade, bookTicker, kline, and core user-data events
 
 ## Install
 
