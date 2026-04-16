@@ -34,6 +34,10 @@ This repository focuses on the most valuable Spot REST surface first instead of 
   - `all_order_lists`
   - `cancel_order_list`
   - `cancel_open_orders`
+  - `commission_rates`
+  - `prevented_matches`
+  - `order_amendments`
+  - `symbol_filters`
   - `open_orders`
   - `create_order`
   - `cancel_order`

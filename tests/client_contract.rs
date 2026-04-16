@@ -3,7 +3,8 @@ use httpmock::MockServer;
 use python_binance_rs::{
     AggregateTrade, AllOrdersRequest, BinanceClient, BookTicker, CancelOrderListRequest,
     CancelOrderRequest, CreateOrderRequest, Error, KlineInterval, MyTradesRequest,
-    OrderListQueryRequest, OrderSide, OrderType, TimeInForce,
+    OrderAmendmentsRequest, OrderListQueryRequest, OrderSide, OrderType, PreventedMatchesRequest,
+    TimeInForce,
 };
 use serde_json::json;
 
@@ -979,4 +980,208 @@ async fn cancels_all_open_orders_for_symbol() {
 
     mock.assert_async().await;
     assert_eq!(response.as_array().expect("array response").len(), 1);
+}
+
+#[tokio::test]
+async fn fetches_commission_rates() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/api/v3/account/commission")
+                .header("x-mbx-apikey", "key")
+                .query_param("symbol", "BTCUSDT")
+                .query_param("recvWindow", "5000")
+                .query_param("timestamp", "1717171717171");
+            then.status(200).json_body(json!({
+                "symbol": "BTCUSDT",
+                "standardCommission": {
+                    "maker": "0.00000010",
+                    "taker": "0.00000020",
+                    "buyer": "0.00000030",
+                    "seller": "0.00000040"
+                },
+                "taxCommission": {
+                    "maker": "0.00000110",
+                    "taker": "0.00000120",
+                    "buyer": "0.00000130",
+                    "seller": "0.00000140"
+                },
+                "discount": {
+                    "enabledForAccount": true,
+                    "enabledForSymbol": true,
+                    "discountAsset": "BNB",
+                    "discount": "0.25000000"
+                }
+            }));
+        })
+        .await;
+
+    let client = BinanceClient::builder()
+        .api_key("key")
+        .api_secret("secret")
+        .fixed_timestamp(1_717_171_717_171)
+        .recv_window(5_000)
+        .rest_base_url(server.base_url())
+        .build()
+        .expect("client should build");
+
+    let response = client
+        .commission_rates("BTCUSDT")
+        .await
+        .expect("request should succeed");
+
+    mock.assert_async().await;
+    assert_eq!(response.symbol, "BTCUSDT");
+    assert_eq!(response.discount.discount_asset, "BNB");
+}
+
+#[tokio::test]
+async fn fetches_prevented_matches() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/api/v3/myPreventedMatches")
+                .header("x-mbx-apikey", "key")
+                .query_param("symbol", "BTCUSDT")
+                .query_param("orderId", "5")
+                .query_param("fromPreventedMatchId", "1")
+                .query_param("limit", "10")
+                .query_param("recvWindow", "5000")
+                .query_param("timestamp", "1717171717171");
+            then.status(200).json_body(json!([
+                {
+                    "symbol": "BTCUSDT",
+                    "preventedMatchId": 1_u64,
+                    "takerOrderId": 5_u64,
+                    "makerSymbol": "BTCUSDT",
+                    "makerOrderId": 3_u64,
+                    "tradeGroupId": 1_i64,
+                    "selfTradePreventionMode": "EXPIRE_MAKER",
+                    "price": "1.100000",
+                    "makerPreventedQuantity": "1.300000",
+                    "transactTime": 1669101687094_u64
+                }
+            ]));
+        })
+        .await;
+
+    let client = BinanceClient::builder()
+        .api_key("key")
+        .api_secret("secret")
+        .fixed_timestamp(1_717_171_717_171)
+        .recv_window(5_000)
+        .rest_base_url(server.base_url())
+        .build()
+        .expect("client should build");
+
+    let response = client
+        .prevented_matches(
+            &PreventedMatchesRequest::new("BTCUSDT")
+                .order_id(5)
+                .from_prevented_match_id(1)
+                .limit(10),
+        )
+        .await
+        .expect("request should succeed");
+
+    mock.assert_async().await;
+    assert_eq!(response.len(), 1);
+    assert_eq!(response[0].prevented_match_id, 1);
+}
+
+#[tokio::test]
+async fn fetches_order_amendments() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/api/v3/order/amendments")
+                .header("x-mbx-apikey", "key")
+                .query_param("symbol", "BTCUSDT")
+                .query_param("orderId", "42")
+                .query_param("fromExecutionId", "7")
+                .query_param("limit", "2")
+                .query_param("recvWindow", "5000")
+                .query_param("timestamp", "1717171717171");
+            then.status(200).json_body(json!([
+                {
+                    "symbol": "BTCUSDT",
+                    "orderId": 42_u64,
+                    "executionId": 8_u64,
+                    "origClientOrderId": "old",
+                    "newClientOrderId": "new",
+                    "origQty": "1.00000000",
+                    "newQty": "0.80000000",
+                    "origPrice": "65000.00",
+                    "newPrice": "64950.00",
+                    "time": 1717171717000_u64
+                }
+            ]));
+        })
+        .await;
+
+    let client = BinanceClient::builder()
+        .api_key("key")
+        .api_secret("secret")
+        .fixed_timestamp(1_717_171_717_171)
+        .recv_window(5_000)
+        .rest_base_url(server.base_url())
+        .build()
+        .expect("client should build");
+
+    let response = client
+        .order_amendments(
+            &OrderAmendmentsRequest::new("BTCUSDT", 42)
+                .from_execution_id(7)
+                .limit(2),
+        )
+        .await
+        .expect("request should succeed");
+
+    mock.assert_async().await;
+    assert_eq!(response.len(), 1);
+    assert_eq!(response[0].execution_id, 8);
+    assert_eq!(response[0].new_client_order_id, "new");
+}
+
+#[tokio::test]
+async fn fetches_symbol_filters() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/api/v3/myFilters")
+                .header("x-mbx-apikey", "key")
+                .query_param("symbol", "BTCUSDT")
+                .query_param("recvWindow", "5000")
+                .query_param("timestamp", "1717171717171");
+            then.status(200).json_body(json!({
+                "symbol": "BTCUSDT",
+                "filters": [
+                    { "filterType": "PRICE_FILTER", "minPrice": "0.01000000", "tickSize": "0.01000000" },
+                    { "filterType": "LOT_SIZE", "minQty": "0.00001000", "stepSize": "0.00001000" }
+                ]
+            }));
+        })
+        .await;
+
+    let client = BinanceClient::builder()
+        .api_key("key")
+        .api_secret("secret")
+        .fixed_timestamp(1_717_171_717_171)
+        .recv_window(5_000)
+        .rest_base_url(server.base_url())
+        .build()
+        .expect("client should build");
+
+    let response = client
+        .symbol_filters("BTCUSDT")
+        .await
+        .expect("request should succeed");
+
+    mock.assert_async().await;
+    assert_eq!(response.symbol, "BTCUSDT");
+    assert_eq!(response.filters.len(), 2);
 }

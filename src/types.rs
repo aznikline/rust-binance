@@ -181,6 +181,68 @@ pub struct OrderListSummary {
     pub extra: HashMap<String, serde_json::Value>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct CommissionDetail {
+    pub maker: String,
+    pub taker: String,
+    pub buyer: String,
+    pub seller: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommissionDiscount {
+    pub enabled_for_account: bool,
+    pub enabled_for_symbol: bool,
+    pub discount_asset: String,
+    pub discount: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommissionRates {
+    pub symbol: String,
+    pub standard_commission: CommissionDetail,
+    pub tax_commission: CommissionDetail,
+    pub discount: CommissionDiscount,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreventedMatch {
+    pub symbol: String,
+    pub prevented_match_id: u64,
+    pub taker_order_id: u64,
+    pub maker_symbol: String,
+    pub maker_order_id: u64,
+    pub trade_group_id: i64,
+    pub self_trade_prevention_mode: String,
+    pub price: String,
+    pub maker_prevented_quantity: String,
+    pub transact_time: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrderAmendment {
+    pub symbol: String,
+    pub order_id: u64,
+    pub execution_id: u64,
+    pub orig_client_order_id: String,
+    pub new_client_order_id: String,
+    pub orig_qty: String,
+    pub new_qty: String,
+    pub orig_price: String,
+    pub new_price: String,
+    pub time: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct SymbolFilters {
+    pub symbol: String,
+    pub filters: Vec<serde_json::Value>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderResponse {
@@ -357,6 +419,23 @@ pub struct CancelOrderListRequest {
     pub order_list_id: Option<u64>,
     pub list_client_order_id: Option<String>,
     pub new_client_order_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PreventedMatchesRequest {
+    pub symbol: String,
+    pub prevented_match_id: Option<u64>,
+    pub order_id: Option<u64>,
+    pub from_prevented_match_id: Option<u64>,
+    pub limit: Option<u16>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct OrderAmendmentsRequest {
+    pub symbol: String,
+    pub order_id: u64,
+    pub from_execution_id: Option<u64>,
+    pub limit: Option<u16>,
 }
 
 impl AggregateTradeRequest {
@@ -571,6 +650,94 @@ impl CancelOrderListRequest {
             list_client_order_id: Some(list_client_order_id.into()),
             new_client_order_id: None,
         }
+    }
+}
+
+impl PreventedMatchesRequest {
+    pub fn new(symbol: impl Into<String>) -> Self {
+        Self {
+            symbol: symbol.into(),
+            prevented_match_id: None,
+            order_id: None,
+            from_prevented_match_id: None,
+            limit: None,
+        }
+    }
+
+    pub fn prevented_match_id(mut self, value: u64) -> Self {
+        self.prevented_match_id = Some(value);
+        self
+    }
+
+    pub fn order_id(mut self, value: u64) -> Self {
+        self.order_id = Some(value);
+        self
+    }
+
+    pub fn from_prevented_match_id(mut self, value: u64) -> Self {
+        self.from_prevented_match_id = Some(value);
+        self
+    }
+
+    pub fn limit(mut self, value: u16) -> Self {
+        self.limit = Some(value);
+        self
+    }
+}
+
+impl ToParams for PreventedMatchesRequest {
+    fn to_params(&self) -> Vec<(String, String)> {
+        let mut params = vec![("symbol".to_string(), self.symbol.clone())];
+        if let Some(value) = self.prevented_match_id {
+            params.push(("preventedMatchId".to_string(), value.to_string()));
+        }
+        if let Some(value) = self.order_id {
+            params.push(("orderId".to_string(), value.to_string()));
+        }
+        if let Some(value) = self.from_prevented_match_id {
+            params.push(("fromPreventedMatchId".to_string(), value.to_string()));
+        }
+        if let Some(value) = self.limit {
+            params.push(("limit".to_string(), value.to_string()));
+        }
+        params
+    }
+}
+
+impl OrderAmendmentsRequest {
+    pub fn new(symbol: impl Into<String>, order_id: u64) -> Self {
+        Self {
+            symbol: symbol.into(),
+            order_id,
+            from_execution_id: None,
+            limit: None,
+        }
+    }
+
+    pub fn from_execution_id(mut self, value: u64) -> Self {
+        self.from_execution_id = Some(value);
+        self
+    }
+
+    pub fn limit(mut self, value: u16) -> Self {
+        self.limit = Some(value);
+        self
+    }
+}
+
+impl ToParams for OrderAmendmentsRequest {
+    fn to_params(&self) -> Vec<(String, String)> {
+        let mut params = vec![
+            ("symbol".to_string(), self.symbol.clone()),
+            ("orderId".to_string(), self.order_id.to_string()),
+        ];
+        if let Some(value) = self.from_execution_id {
+            params.push(("fromExecutionId".to_string(), value.to_string()));
+        }
+        if let Some(value) = self.limit {
+            params.push(("limit".to_string(), value.to_string()));
+        }
+        params
     }
 }
 

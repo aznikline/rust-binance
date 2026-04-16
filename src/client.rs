@@ -10,9 +10,10 @@ use crate::error::{BinanceApiError, Error};
 use crate::types::{
     AccountBalance, AccountInformation, AccountTrade, AggregateTrade, AggregateTradeRequest,
     AllOrdersRequest, AveragePrice, BookTicker, CancelOrderListRequest, CancelOrderRequest,
-    CreateOrderRequest, ExchangeInfo, Kline, KlinesRequest, MyTradesRequest, OrderBook,
-    OrderCountUsage, OrderListQueryRequest, OrderListSummary, OrderQueryRequest, OrderResponse,
-    PriceTicker, ServerTimeResponse, Ticker24hr, ToParams, Trade,
+    CommissionRates, CreateOrderRequest, ExchangeInfo, Kline, KlinesRequest, MyTradesRequest,
+    OrderAmendment, OrderAmendmentsRequest, OrderBook, OrderCountUsage, OrderListQueryRequest,
+    OrderListSummary, OrderQueryRequest, OrderResponse, PreventedMatch, PreventedMatchesRequest,
+    PriceTicker, ServerTimeResponse, SymbolFilters, Ticker24hr, ToParams, Trade,
 };
 
 type HmacSha256 = Hmac<Sha256>;
@@ -254,6 +255,38 @@ impl BinanceClient {
     pub async fn cancel_open_orders(&self, symbol: &str) -> Result<serde_json::Value, Error> {
         let params = optional_params([("symbol", Some(symbol.to_owned()))]);
         self.send_signed(Method::DELETE, "/api/v3/openOrders", params)
+            .await
+    }
+
+    pub async fn commission_rates(&self, symbol: &str) -> Result<CommissionRates, Error> {
+        let params = optional_params([("symbol", Some(symbol.to_owned()))]);
+        self.send_signed(Method::GET, "/api/v3/account/commission", params)
+            .await
+    }
+
+    pub async fn prevented_matches(
+        &self,
+        request: &PreventedMatchesRequest,
+    ) -> Result<Vec<PreventedMatch>, Error> {
+        self.send_signed(
+            Method::GET,
+            "/api/v3/myPreventedMatches",
+            request.to_params(),
+        )
+        .await
+    }
+
+    pub async fn order_amendments(
+        &self,
+        request: &OrderAmendmentsRequest,
+    ) -> Result<Vec<OrderAmendment>, Error> {
+        self.send_signed(Method::GET, "/api/v3/order/amendments", request.to_params())
+            .await
+    }
+
+    pub async fn symbol_filters(&self, symbol: &str) -> Result<SymbolFilters, Error> {
+        let params = optional_params([("symbol", Some(symbol.to_owned()))]);
+        self.send_signed(Method::GET, "/api/v3/myFilters", params)
             .await
     }
 
