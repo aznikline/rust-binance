@@ -10,9 +10,19 @@ This repository focuses on the most valuable Spot REST surface first instead of 
   - `ping`
   - `server_time`
   - `exchange_info`
+  - `symbol_info`
   - `ticker_price`
+  - `book_ticker`
+  - `book_tickers`
+  - `recent_trades`
+  - `historical_trades`
+  - `aggregate_trades`
+  - `average_price`
+  - `ticker_24hr`
+  - `ticker_24hr_all`
   - `order_book`
   - `klines`
+  - `ui_klines`
 - Signed REST endpoints
   - `account`
   - `open_orders`

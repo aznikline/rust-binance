@@ -8,8 +8,9 @@ use sha2::Sha256;
 
 use crate::error::{BinanceApiError, Error};
 use crate::types::{
-    AccountInformation, CancelOrderRequest, CreateOrderRequest, ExchangeInfo, Kline, KlinesRequest,
-    OrderBook, OrderQueryRequest, OrderResponse, PriceTicker, ServerTimeResponse, ToParams,
+    AccountInformation, AggregateTrade, AggregateTradeRequest, AveragePrice, BookTicker,
+    CancelOrderRequest, CreateOrderRequest, ExchangeInfo, Kline, KlinesRequest, OrderBook,
+    OrderQueryRequest, OrderResponse, PriceTicker, ServerTimeResponse, Ticker24hr, ToParams, Trade,
 };
 
 type HmacSha256 = Hmac<Sha256>;
@@ -66,6 +67,88 @@ impl BinanceClient {
             .await
     }
 
+    pub async fn book_ticker(&self, symbol: &str) -> Result<BookTicker, Error> {
+        let params = optional_params([("symbol", Some(symbol.to_owned()))]);
+        self.send_public(Method::GET, "/api/v3/ticker/bookTicker", params)
+            .await
+    }
+
+    pub async fn book_tickers(&self) -> Result<Vec<BookTicker>, Error> {
+        self.send_public(Method::GET, "/api/v3/ticker/bookTicker", Vec::new())
+            .await
+    }
+
+    pub async fn recent_trades(
+        &self,
+        symbol: &str,
+        limit: Option<u16>,
+    ) -> Result<Vec<Trade>, Error> {
+        let params = optional_params([
+            ("symbol", Some(symbol.to_owned())),
+            ("limit", limit.map(|value| value.to_string())),
+        ]);
+        self.send_public(Method::GET, "/api/v3/trades", params)
+            .await
+    }
+
+    pub async fn historical_trades(
+        &self,
+        symbol: &str,
+        limit: Option<u16>,
+        from_id: Option<u64>,
+    ) -> Result<Vec<Trade>, Error> {
+        let params = optional_params([
+            ("symbol", Some(symbol.to_owned())),
+            ("limit", limit.map(|value| value.to_string())),
+            ("fromId", from_id.map(|value| value.to_string())),
+        ]);
+        self.send_keyed_public(Method::GET, "/api/v3/historicalTrades", params)
+            .await
+    }
+
+    pub async fn aggregate_trades(
+        &self,
+        symbol: &str,
+        limit: Option<u16>,
+        from_id: Option<u64>,
+        start_time: Option<u64>,
+        end_time: Option<u64>,
+    ) -> Result<Vec<AggregateTrade>, Error> {
+        self.aggregate_trades_with_request(
+            &AggregateTradeRequest::new(symbol)
+                .limit_opt(limit)
+                .from_id_opt(from_id)
+                .start_time_opt(start_time)
+                .end_time_opt(end_time),
+        )
+        .await
+    }
+
+    pub async fn aggregate_trades_with_request(
+        &self,
+        request: &AggregateTradeRequest,
+    ) -> Result<Vec<AggregateTrade>, Error> {
+        self.send_public(Method::GET, "/api/v3/aggTrades", request.to_params())
+            .await
+    }
+
+    pub async fn average_price(&self, symbol: &str) -> Result<AveragePrice, Error> {
+        let params = optional_params([("symbol", Some(symbol.to_owned()))]);
+        self.send_public(Method::GET, "/api/v3/avgPrice", params)
+            .await
+    }
+
+    pub async fn ticker_24hr(&self, symbol: &str) -> Result<Ticker24hr, Error> {
+        let params = optional_params([("symbol", Some(symbol.to_owned()))]);
+        self.send_public(Method::GET, "/api/v3/ticker/24hr", params)
+            .await
+    }
+
+    pub async fn ticker_24hr_all(&self) -> Result<Vec<Ticker24hr>, Error> {
+        self.send_public(Method::GET, "/api/v3/ticker/24hr", Vec::new())
+            .await
+    }
+
     pub async fn order_book(&self, symbol: &str, limit: Option<u16>) -> Result<OrderBook, Error> {
         let params = optional_params([
             ("symbol", Some(symbol.to_owned())),
@@ -77,6 +160,24 @@ impl BinanceClient {
     pub async fn klines(&self, request: &KlinesRequest) -> Result<Vec<Kline>, Error> {
         self.send_public(Method::GET, "/api/v3/klines", request.to_params())
             .await
+    }
+
+    pub async fn ui_klines(&self, request: &KlinesRequest) -> Result<Vec<Kline>, Error> {
+        self.send_public(Method::GET, "/api/v3/uiKlines", request.to_params())
+            .await
+    }
+
+    pub async fn symbol_info(&self, symbol: &str) -> Result<Option<serde_json::Value>, Error> {
+        let exchange_info = self.exchange_info(None).await?;
+        Ok(exchange_info
+            .get("symbols")
+            .and_then(|symbols| symbols.as_array())
+            .and_then(|symbols| {
+                symbols.iter().find(|entry| {
+                    entry.get("symbol").and_then(|value| value.as_str()) == Some(symbol)
+                })
+            })
+            .cloned())
     }
 
     pub async fn account(&self) -> Result<AccountInformation, Error> {
@@ -130,6 +231,22 @@ impl BinanceClient {
         let query = encode_params(&params);
         let url = self.url(path, (!query.is_empty()).then_some(query.as_str()));
         let request = self.http.request(method, url);
+        self.execute(request).await
+    }
+
+    async fn send_keyed_public<T: DeserializeOwned>(
+        &self,
+        method: Method,
+        path: &str,
+        params: Vec<(String, String)>,
+    ) -> Result<T, Error> {
+        let api_key = self.api_key.as_deref().ok_or(Error::MissingCredentials)?;
+        let query = encode_params(&params);
+        let url = self.url(path, (!query.is_empty()).then_some(query.as_str()));
+        let request = self
+            .http
+            .request(method, url)
+            .header(API_KEY_HEADER, api_key);
         self.execute(request).await
     }
 

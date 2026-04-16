@@ -20,6 +20,82 @@ pub struct PriceTicker {
     pub price: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BookTicker {
+    pub symbol: String,
+    pub bid_price: String,
+    pub bid_qty: String,
+    pub ask_price: String,
+    pub ask_qty: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Trade {
+    pub id: u64,
+    pub price: String,
+    pub qty: String,
+    pub quote_qty: String,
+    pub time: u64,
+    pub is_buyer_maker: bool,
+    pub is_best_match: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct AggregateTrade {
+    #[serde(rename = "a")]
+    pub aggregate_trade_id: u64,
+    #[serde(rename = "p")]
+    pub price: String,
+    #[serde(rename = "q")]
+    pub quantity: String,
+    #[serde(rename = "f")]
+    pub first_trade_id: u64,
+    #[serde(rename = "l")]
+    pub last_trade_id: u64,
+    #[serde(rename = "T")]
+    pub timestamp: u64,
+    #[serde(rename = "m")]
+    pub is_buyer_maker: bool,
+    #[serde(rename = "M")]
+    pub is_best_match: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AveragePrice {
+    pub mins: u64,
+    pub price: String,
+    pub close_time: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Ticker24hr {
+    pub symbol: String,
+    pub price_change: String,
+    pub price_change_percent: String,
+    pub weighted_avg_price: String,
+    pub prev_close_price: String,
+    pub last_price: String,
+    pub last_qty: String,
+    pub bid_price: String,
+    pub bid_qty: String,
+    pub ask_price: String,
+    pub ask_qty: String,
+    pub open_price: String,
+    pub high_price: String,
+    pub low_price: String,
+    pub volume: String,
+    pub quote_volume: String,
+    pub open_time: u64,
+    pub close_time: u64,
+    pub first_id: u64,
+    pub last_id: u64,
+    pub count: u64,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderBook {
@@ -188,6 +264,86 @@ pub struct KlinesRequest {
     pub end_time: Option<u64>,
     pub time_zone: Option<String>,
     pub limit: Option<u16>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct AggregateTradeRequest {
+    pub symbol: String,
+    pub from_id: Option<u64>,
+    pub start_time: Option<u64>,
+    pub end_time: Option<u64>,
+    pub limit: Option<u16>,
+}
+
+impl AggregateTradeRequest {
+    pub fn new(symbol: impl Into<String>) -> Self {
+        Self {
+            symbol: symbol.into(),
+            from_id: None,
+            start_time: None,
+            end_time: None,
+            limit: None,
+        }
+    }
+
+    pub fn from_id(mut self, value: u64) -> Self {
+        self.from_id = Some(value);
+        self
+    }
+
+    pub fn from_id_opt(mut self, value: Option<u64>) -> Self {
+        self.from_id = value;
+        self
+    }
+
+    pub fn start_time(mut self, value: u64) -> Self {
+        self.start_time = Some(value);
+        self
+    }
+
+    pub fn start_time_opt(mut self, value: Option<u64>) -> Self {
+        self.start_time = value;
+        self
+    }
+
+    pub fn end_time(mut self, value: u64) -> Self {
+        self.end_time = Some(value);
+        self
+    }
+
+    pub fn end_time_opt(mut self, value: Option<u64>) -> Self {
+        self.end_time = value;
+        self
+    }
+
+    pub fn limit(mut self, value: u16) -> Self {
+        self.limit = Some(value);
+        self
+    }
+
+    pub fn limit_opt(mut self, value: Option<u16>) -> Self {
+        self.limit = value;
+        self
+    }
+}
+
+impl ToParams for AggregateTradeRequest {
+    fn to_params(&self) -> Vec<(String, String)> {
+        let mut params = vec![("symbol".to_string(), self.symbol.clone())];
+        if let Some(value) = self.from_id {
+            params.push(("fromId".to_string(), value.to_string()));
+        }
+        if let Some(value) = self.start_time {
+            params.push(("startTime".to_string(), value.to_string()));
+        }
+        if let Some(value) = self.end_time {
+            params.push(("endTime".to_string(), value.to_string()));
+        }
+        if let Some(value) = self.limit {
+            params.push(("limit".to_string(), value.to_string()));
+        }
+        params
+    }
 }
 
 impl KlinesRequest {
