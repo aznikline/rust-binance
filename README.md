@@ -4,6 +4,54 @@
 
 This repository focuses on the most valuable Spot REST surface first instead of attempting full parity with the Python package in one pass.
 
+## Quick start
+
+Run tests first:
+
+```bash
+cargo test
+```
+
+Run the example against Binance Spot:
+
+```bash
+BINANCE_API_KEY=... BINANCE_API_SECRET=... cargo run --example spot_rest
+```
+
+Add it as a dependency:
+
+```toml
+[dependencies]
+python-binance-rs = { path = "." }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+## Repository map
+
+```text
+src/
+  client.rs   core REST client
+  ws.rs       websocket helpers and typed events
+  types.rs    request/response models
+  error.rs    library error types
+examples/
+  spot_rest.rs
+tests/
+  client_contract.rs
+  websocket_contract.rs
+```
+
+## Current status
+
+Today this crate is strongest on:
+
+- Binance Spot REST support
+- signed request handling
+- async `reqwest` transport with `rustls`
+- Spot websocket helpers, typed event parsing, and WS API request/response models
+
+It is not yet aiming for full `python-binance` parity.
+
 ## Current scope
 
 - Public REST endpoints
@@ -50,16 +98,10 @@ This repository focuses on the most valuable Spot REST surface first instead of 
   - raw and combined market stream URL builders
   - websocket connection helpers
   - typed parsing for trade, bookTicker, kline, and core user-data events
+  - websocket API base client and request/response envelopes
+  - helpers for `userDataStream.subscribe` and `userDataStream.subscribe.listenToken`
 
-## Install
-
-```toml
-[dependencies]
-python-binance-rs = { path = "." }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-```
-
-## Quick start
+## Example code
 
 ```rust
 use python_binance_rs::{BinanceClient, CreateOrderRequest, OrderSide, TimeInForce};
@@ -87,14 +129,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("new order id: {}", order.order_id);
     Ok(())
 }
-```
-
-## Example
-
-Run the example against Binance Spot:
-
-```bash
-BINANCE_API_KEY=... BINANCE_API_SECRET=... cargo run --example spot_rest
 ```
 
 ## Notes

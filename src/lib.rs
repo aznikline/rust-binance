@@ -16,8 +16,10 @@ pub use types::{
     ServerTimeResponse, SymbolFilters, Ticker24hr, TimeInForce, ToParams, Trade,
 };
 pub use ws::{
-    BalanceUpdateEvent, BinanceWebsocketClient, BinanceWebsocketClientBuilder, BookTickerStreamEvent,
-    CombinedStream, ExecutionReportEvent, KlinePayload, KlineStreamEvent, ListStatusEvent,
-    ListStatusOrder, OutboundAccountPositionEvent, TradeStreamEvent, UserBalance, UserDataEvent,
-    WsConnection,
+    BalanceUpdateEvent, BinanceWebsocketApiClient, BinanceWebsocketApiClientBuilder,
+    BinanceWebsocketApiRequest, BinanceWebsocketApiResponse, BinanceWebsocketClient,
+    BinanceWebsocketClientBuilder, BookTickerStreamEvent, CombinedStream, ExecutionReportEvent,
+    KlinePayload, KlineStreamEvent, ListStatusEvent, ListStatusOrder,
+    OutboundAccountPositionEvent, TradeStreamEvent, UserBalance, UserDataEvent,
+    UserDataStreamEvent, WsConnection,
 };

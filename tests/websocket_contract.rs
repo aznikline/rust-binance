@@ -1,6 +1,7 @@
 use python_binance_rs::{
+    BinanceWebsocketApiClient, BinanceWebsocketApiRequest, BinanceWebsocketApiResponse,
     BinanceWebsocketClient, BookTickerStreamEvent, CombinedStream, KlineInterval, KlineStreamEvent,
-    TradeStreamEvent, UserDataEvent,
+    TradeStreamEvent, UserDataEvent, UserDataStreamEvent,
 };
 
 #[test]
@@ -144,6 +145,96 @@ fn parses_user_data_execution_report() {
             assert_eq!(report.order_id, 4_293_153);
             assert_eq!(report.current_execution_type, "NEW");
         }
+        other => panic!("unexpected event: {other:?}"),
+    }
+}
+
+#[test]
+fn builds_ws_api_url() {
+    let ws_api = BinanceWebsocketApiClient::builder()
+        .base_url("wss://ws-api.binance.com:443/ws-api/v3")
+        .build();
+
+    assert_eq!(
+        ws_api.base_url(),
+        "wss://ws-api.binance.com:443/ws-api/v3"
+    );
+}
+
+#[test]
+fn serializes_user_data_subscribe_request() {
+    let request = BinanceWebsocketApiRequest::user_data_subscribe("req-1");
+    let value = serde_json::to_value(&request).expect("request should serialize");
+
+    assert_eq!(value["id"], "req-1");
+    assert_eq!(value["method"], "userDataStream.subscribe");
+    assert!(value.get("params").is_none());
+}
+
+#[test]
+fn serializes_user_data_listen_token_request() {
+    let request =
+        BinanceWebsocketApiRequest::user_data_subscribe_listen_token("req-2", "listen-token");
+    let value = serde_json::to_value(&request).expect("request should serialize");
+
+    assert_eq!(value["id"], "req-2");
+    assert_eq!(value["method"], "userDataStream.subscribe.listenToken");
+    assert_eq!(value["params"]["listenToken"], "listen-token");
+}
+
+#[test]
+fn parses_ws_api_response_envelope() {
+    let response: BinanceWebsocketApiResponse<serde_json::Value> = serde_json::from_str(
+        r#"{
+            "id":"abc",
+            "status":200,
+            "result":{"subscriptionId":7},
+            "rateLimits":[{"rateLimitType":"REQUEST_WEIGHT","interval":"MINUTE","intervalNum":1,"limit":6000,"count":2}]
+        }"#,
+    )
+    .expect("response should parse");
+
+    assert_eq!(response.id, "abc");
+    assert_eq!(response.status, 200);
+    assert_eq!(response.result["subscriptionId"], 7);
+    assert_eq!(response.rate_limits.expect("rate limits").len(), 1);
+}
+
+#[test]
+fn parses_subscription_wrapped_user_data_event() {
+    let event: UserDataStreamEvent = serde_json::from_str(
+        r#"{
+            "subscriptionId":42,
+            "event":{
+                "e":"executionReport",
+                "E":1499405658658,
+                "s":"ETHBTC",
+                "c":"mUvoqJxFIILMdfAW5iGSOW",
+                "S":"BUY",
+                "o":"LIMIT",
+                "f":"GTC",
+                "q":"1.00000000",
+                "p":"0.10264410",
+                "x":"NEW",
+                "X":"NEW",
+                "i":4293153,
+                "l":"0.00000000",
+                "z":"0.00000000",
+                "L":"0.00000000",
+                "n":"0",
+                "N":null,
+                "T":1499405658657,
+                "t":-1,
+                "m":false,
+                "w":true
+            }
+        }"#,
+    )
+    .expect("wrapped event should parse");
+
+    assert_eq!(event.subscription_id, 42);
+    match event.event {
+        UserDataEvent::ExecutionReport(report) => assert_eq!(report.symbol, "ETHBTC"),
         other => panic!("unexpected event: {other:?}"),
     }
 }

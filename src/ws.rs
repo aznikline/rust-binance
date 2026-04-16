@@ -4,6 +4,7 @@ use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use crate::{Error, KlineInterval};
 
 const DEFAULT_WS_BASE_URL: &str = "wss://stream.binance.com:9443";
+const DEFAULT_WS_API_BASE_URL: &str = "wss://ws-api.binance.com:443/ws-api/v3";
 
 pub type WsConnection = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
@@ -13,7 +14,17 @@ pub struct BinanceWebsocketClient {
 }
 
 #[derive(Debug, Clone)]
+pub struct BinanceWebsocketApiClient {
+    base_url: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct BinanceWebsocketClientBuilder {
+    base_url: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct BinanceWebsocketApiClientBuilder {
     base_url: String,
 }
 
@@ -21,6 +32,31 @@ pub struct BinanceWebsocketClientBuilder {
 pub struct CombinedStream<T> {
     pub stream: String,
     pub data: T,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BinanceWebsocketApiRequest<T = serde_json::Value> {
+    pub id: String,
+    pub method: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<T>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct BinanceWebsocketApiResponse<T> {
+    pub id: String,
+    pub status: u16,
+    #[serde(default)]
+    pub result: T,
+    #[serde(rename = "rateLimits")]
+    pub rate_limits: Option<Vec<serde_json::Value>>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct UserDataStreamEvent {
+    #[serde(rename = "subscriptionId")]
+    pub subscription_id: u64,
+    pub event: UserDataEvent,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -237,6 +273,12 @@ impl BinanceWebsocketClient {
         }
     }
 
+    pub fn api_builder() -> BinanceWebsocketApiClientBuilder {
+        BinanceWebsocketApiClientBuilder {
+            base_url: DEFAULT_WS_API_BASE_URL.to_string(),
+        }
+    }
+
     pub fn trade_stream(symbol: &str) -> String {
         format!("{}@trade", normalize_symbol(symbol))
     }
@@ -291,6 +333,73 @@ impl BinanceWebsocketClientBuilder {
         BinanceWebsocketClient {
             base_url: self.base_url,
         }
+    }
+}
+
+impl BinanceWebsocketApiClient {
+    pub fn builder() -> BinanceWebsocketApiClientBuilder {
+        BinanceWebsocketApiClientBuilder {
+            base_url: DEFAULT_WS_API_BASE_URL.to_string(),
+        }
+    }
+
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
+    pub async fn connect(&self) -> Result<WsConnection, Error> {
+        let (stream, _) = connect_async(self.base_url()).await?;
+        Ok(stream)
+    }
+}
+
+impl BinanceWebsocketApiClientBuilder {
+    pub fn base_url(mut self, value: impl Into<String>) -> Self {
+        self.base_url = value.into().trim_end_matches('/').to_string();
+        self
+    }
+
+    pub fn build(self) -> BinanceWebsocketApiClient {
+        BinanceWebsocketApiClient {
+            base_url: self.base_url,
+        }
+    }
+}
+
+impl BinanceWebsocketApiRequest<serde_json::Value> {
+    pub fn new(id: impl Into<String>, method: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            method: method.into(),
+            params: None,
+        }
+    }
+
+    pub fn with_params(
+        id: impl Into<String>,
+        method: impl Into<String>,
+        params: serde_json::Value,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            method: method.into(),
+            params: Some(params),
+        }
+    }
+
+    pub fn user_data_subscribe(id: impl Into<String>) -> Self {
+        Self::new(id, "userDataStream.subscribe")
+    }
+
+    pub fn user_data_subscribe_listen_token(
+        id: impl Into<String>,
+        listen_token: impl Into<String>,
+    ) -> Self {
+        Self::with_params(
+            id,
+            "userDataStream.subscribe.listenToken",
+            serde_json::json!({ "listenToken": listen_token.into() }),
+        )
     }
 }
 
