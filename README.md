@@ -39,6 +39,8 @@ This repository focuses on the most valuable Spot REST surface first instead of 
   - `order_amendments`
   - `symbol_filters`
   - `open_orders`
+  - `create_oco_order`
+  - `cancel_replace_order`
   - `create_order`
   - `cancel_order`
   - `get_order`

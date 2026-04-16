@@ -2,9 +2,9 @@ use httpmock::Method::{GET, POST};
 use httpmock::MockServer;
 use python_binance_rs::{
     AggregateTrade, AllOrdersRequest, BinanceClient, BookTicker, CancelOrderListRequest,
-    CancelOrderRequest, CreateOrderRequest, Error, KlineInterval, MyTradesRequest,
-    OrderAmendmentsRequest, OrderListQueryRequest, OrderSide, OrderType, PreventedMatchesRequest,
-    TimeInForce,
+    CancelOrderRequest, CancelReplaceMode, CreateOcoOrderRequest, CreateOrderRequest, Error,
+    KlineInterval, MyTradesRequest, OrderAmendmentsRequest, OrderListQueryRequest, OrderSide,
+    OrderType, PreventedMatchesRequest, TimeInForce,
 };
 use serde_json::json;
 
@@ -1184,4 +1184,146 @@ async fn fetches_symbol_filters() {
     mock.assert_async().await;
     assert_eq!(response.symbol, "BTCUSDT");
     assert_eq!(response.filters.len(), 2);
+}
+
+#[tokio::test]
+async fn creates_oco_order_list() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/api/v3/orderList/oco")
+                .header("x-mbx-apikey", "key")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body_contains("symbol=BTCUSDT")
+                .body_contains("side=SELL")
+                .body_contains("quantity=0.10000000")
+                .body_contains("aboveType=LIMIT_MAKER")
+                .body_contains("belowType=STOP_LOSS_LIMIT")
+                .body_contains("abovePrice=70000.00")
+                .body_contains("belowPrice=64000.00")
+                .body_contains("belowStopPrice=64500.00");
+            then.status(200).json_body(json!({
+                "orderListId": 33_u64,
+                "contingencyType": "OCO",
+                "listStatusType": "EXEC_STARTED",
+                "listOrderStatus": "EXECUTING",
+                "listClientOrderId": "oco-1",
+                "transactionTime": 1717171717000_u64,
+                "symbol": "BTCUSDT",
+                "orders": [
+                    { "symbol": "BTCUSDT", "orderId": 101_u64, "clientOrderId": "above-leg" },
+                    { "symbol": "BTCUSDT", "orderId": 102_u64, "clientOrderId": "below-leg" }
+                ]
+            }));
+        })
+        .await;
+
+    let client = BinanceClient::builder()
+        .api_key("key")
+        .api_secret("secret")
+        .fixed_timestamp(1_717_171_717_171)
+        .recv_window(5_000)
+        .rest_base_url(server.base_url())
+        .build()
+        .expect("client should build");
+
+    let request =
+        CreateOcoOrderRequest::sell("BTCUSDT", "0.10000000", "70000.00", "64500.00", "64000.00");
+
+    let response = client
+        .create_oco_order(&request)
+        .await
+        .expect("request should succeed");
+
+    mock.assert_async().await;
+    assert_eq!(response.order_list_id, 33);
+    assert_eq!(response.orders.len(), 2);
+}
+
+#[tokio::test]
+async fn cancel_replace_order_uses_signed_body() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/api/v3/order/cancelReplace")
+                .header("x-mbx-apikey", "key")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body_contains("symbol=BTCUSDT")
+                .body_contains("side=BUY")
+                .body_contains("type=LIMIT")
+                .body_contains("timeInForce=GTC")
+                .body_contains("quantity=0.01000000")
+                .body_contains("price=64000.00")
+                .body_contains("cancelReplaceMode=STOP_ON_FAILURE")
+                .body_contains("cancelOrderId=42");
+            then.status(200).json_body(json!({
+                "cancelResult": "SUCCESS",
+                "newOrderResult": "SUCCESS",
+                "cancelResponse": {
+                    "symbol": "BTCUSDT",
+                    "orderId": 42_u64,
+                    "orderListId": -1,
+                    "clientOrderId": "old-order",
+                    "price": "65000.00",
+                    "origQty": "0.01000000",
+                    "executedQty": "0.00000000",
+                    "cummulativeQuoteQty": "0.00000000",
+                    "status": "CANCELED",
+                    "timeInForce": "GTC",
+                    "type": "LIMIT",
+                    "side": "BUY"
+                },
+                "newOrderResponse": {
+                    "symbol": "BTCUSDT",
+                    "orderId": 43_u64,
+                    "orderListId": -1,
+                    "clientOrderId": "new-order",
+                    "transactTime": 1717171717000_u64,
+                    "price": "64000.00",
+                    "origQty": "0.01000000",
+                    "executedQty": "0.00000000",
+                    "cummulativeQuoteQty": "0.00000000",
+                    "status": "NEW",
+                    "timeInForce": "GTC",
+                    "type": "LIMIT",
+                    "side": "BUY"
+                }
+            }));
+        })
+        .await;
+
+    let client = BinanceClient::builder()
+        .api_key("key")
+        .api_secret("secret")
+        .fixed_timestamp(1_717_171_717_171)
+        .recv_window(5_000)
+        .rest_base_url(server.base_url())
+        .build()
+        .expect("client should build");
+
+    let new_order = CreateOrderRequest::limit(
+        "BTCUSDT",
+        OrderSide::Buy,
+        "0.01000000",
+        "64000.00",
+        TimeInForce::Gtc,
+    );
+
+    let response = client
+        .cancel_replace_order(42, CancelReplaceMode::StopOnFailure, &new_order)
+        .await
+        .expect("request should succeed");
+
+    mock.assert_async().await;
+    assert_eq!(response.cancel_result, "SUCCESS");
+    assert_eq!(response.new_order_result, "SUCCESS");
+    assert_eq!(
+        response
+            .new_order_response
+            .expect("new order response should exist")
+            .order_id,
+        43
+    );
 }

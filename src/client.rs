@@ -10,10 +10,11 @@ use crate::error::{BinanceApiError, Error};
 use crate::types::{
     AccountBalance, AccountInformation, AccountTrade, AggregateTrade, AggregateTradeRequest,
     AllOrdersRequest, AveragePrice, BookTicker, CancelOrderListRequest, CancelOrderRequest,
-    CommissionRates, CreateOrderRequest, ExchangeInfo, Kline, KlinesRequest, MyTradesRequest,
-    OrderAmendment, OrderAmendmentsRequest, OrderBook, OrderCountUsage, OrderListQueryRequest,
-    OrderListSummary, OrderQueryRequest, OrderResponse, PreventedMatch, PreventedMatchesRequest,
-    PriceTicker, ServerTimeResponse, SymbolFilters, Ticker24hr, ToParams, Trade,
+    CancelReplaceMode, CancelReplaceResponse, CommissionRates, CreateOcoOrderRequest,
+    CreateOrderRequest, ExchangeInfo, Kline, KlinesRequest, MyTradesRequest, OrderAmendment,
+    OrderAmendmentsRequest, OrderBook, OrderCountUsage, OrderListQueryRequest, OrderListSummary,
+    OrderQueryRequest, OrderResponse, PreventedMatch, PreventedMatchesRequest, PriceTicker,
+    ServerTimeResponse, SymbolFilters, Ticker24hr, ToParams, Trade,
 };
 
 type HmacSha256 = Hmac<Sha256>;
@@ -287,6 +288,27 @@ impl BinanceClient {
     pub async fn symbol_filters(&self, symbol: &str) -> Result<SymbolFilters, Error> {
         let params = optional_params([("symbol", Some(symbol.to_owned()))]);
         self.send_signed(Method::GET, "/api/v3/myFilters", params)
+            .await
+    }
+
+    pub async fn create_oco_order(
+        &self,
+        request: &CreateOcoOrderRequest,
+    ) -> Result<OrderListSummary, Error> {
+        self.send_signed(Method::POST, "/api/v3/orderList/oco", request.to_params())
+            .await
+    }
+
+    pub async fn cancel_replace_order(
+        &self,
+        cancel_order_id: u64,
+        mode: CancelReplaceMode,
+        new_order: &CreateOrderRequest,
+    ) -> Result<CancelReplaceResponse, Error> {
+        let mut params = new_order.to_params();
+        params.push(("cancelReplaceMode".to_string(), mode.as_str().to_string()));
+        params.push(("cancelOrderId".to_string(), cancel_order_id.to_string()));
+        self.send_signed(Method::POST, "/api/v3/order/cancelReplace", params)
             .await
     }
 

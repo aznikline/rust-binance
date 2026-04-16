@@ -181,6 +181,15 @@ pub struct OrderListSummary {
     pub extra: HashMap<String, serde_json::Value>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CancelReplaceResponse {
+    pub cancel_result: String,
+    pub new_order_result: String,
+    pub cancel_response: Option<OrderResponse>,
+    pub new_order_response: Option<OrderResponse>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct CommissionDetail {
     pub maker: String,
@@ -436,6 +445,36 @@ pub struct OrderAmendmentsRequest {
     pub order_id: u64,
     pub from_execution_id: Option<u64>,
     pub limit: Option<u16>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CancelReplaceMode {
+    StopOnFailure,
+    AllowFailure,
+}
+
+impl CancelReplaceMode {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::StopOnFailure => "STOP_ON_FAILURE",
+            Self::AllowFailure => "ALLOW_FAILURE",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreateOcoOrderRequest {
+    pub symbol: String,
+    pub side: OrderSide,
+    pub quantity: String,
+    pub above_type: String,
+    pub below_type: String,
+    pub above_price: String,
+    pub below_stop_price: String,
+    pub below_price: String,
+    pub above_time_in_force: Option<TimeInForce>,
+    pub below_time_in_force: Option<TimeInForce>,
+    pub list_client_order_id: Option<String>,
 }
 
 impl AggregateTradeRequest {
@@ -722,6 +761,55 @@ impl OrderAmendmentsRequest {
     pub fn limit(mut self, value: u16) -> Self {
         self.limit = Some(value);
         self
+    }
+}
+
+impl CreateOcoOrderRequest {
+    pub fn sell(
+        symbol: impl Into<String>,
+        quantity: impl Into<String>,
+        above_price: impl Into<String>,
+        below_stop_price: impl Into<String>,
+        below_price: impl Into<String>,
+    ) -> Self {
+        Self {
+            symbol: symbol.into(),
+            side: OrderSide::Sell,
+            quantity: quantity.into(),
+            above_type: "LIMIT_MAKER".to_string(),
+            below_type: "STOP_LOSS_LIMIT".to_string(),
+            above_price: above_price.into(),
+            below_stop_price: below_stop_price.into(),
+            below_price: below_price.into(),
+            above_time_in_force: None,
+            below_time_in_force: Some(TimeInForce::Gtc),
+            list_client_order_id: None,
+        }
+    }
+}
+
+impl ToParams for CreateOcoOrderRequest {
+    fn to_params(&self) -> Vec<(String, String)> {
+        let mut params = vec![
+            ("symbol".to_string(), self.symbol.clone()),
+            ("side".to_string(), self.side.as_str().to_string()),
+            ("quantity".to_string(), self.quantity.clone()),
+            ("aboveType".to_string(), self.above_type.clone()),
+            ("belowType".to_string(), self.below_type.clone()),
+            ("abovePrice".to_string(), self.above_price.clone()),
+            ("belowStopPrice".to_string(), self.below_stop_price.clone()),
+            ("belowPrice".to_string(), self.below_price.clone()),
+        ];
+        if let Some(value) = self.above_time_in_force {
+            params.push(("aboveTimeInForce".to_string(), value.as_str().to_string()));
+        }
+        if let Some(value) = self.below_time_in_force {
+            params.push(("belowTimeInForce".to_string(), value.as_str().to_string()));
+        }
+        if let Some(value) = &self.list_client_order_id {
+            params.push(("listClientOrderId".to_string(), value.clone()));
+        }
+        params
     }
 }
 
