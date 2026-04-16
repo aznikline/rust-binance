@@ -1,8 +1,9 @@
 use httpmock::Method::{GET, POST};
 use httpmock::MockServer;
 use python_binance_rs::{
-    AggregateTrade, AllOrdersRequest, BinanceClient, BookTicker, CancelOrderRequest,
-    CreateOrderRequest, Error, KlineInterval, MyTradesRequest, OrderSide, OrderType, TimeInForce,
+    AggregateTrade, AllOrdersRequest, BinanceClient, BookTicker, CancelOrderListRequest,
+    CancelOrderRequest, CreateOrderRequest, Error, KlineInterval, MyTradesRequest,
+    OrderListQueryRequest, OrderSide, OrderType, TimeInForce,
 };
 use serde_json::json;
 
@@ -780,4 +781,202 @@ async fn fetches_open_order_lists() {
     assert_eq!(response.len(), 1);
     assert_eq!(response[0].order_list_id, 31);
     assert_eq!(response[0].orders.len(), 2);
+}
+
+#[tokio::test]
+async fn fetches_specific_order_list() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/api/v3/orderList")
+                .header("x-mbx-apikey", "key")
+                .query_param("orderListId", "31")
+                .query_param("recvWindow", "5000")
+                .query_param("timestamp", "1717171717171");
+            then.status(200).json_body(json!({
+                "orderListId": 31_u64,
+                "contingencyType": "OCO",
+                "listStatusType": "EXEC_STARTED",
+                "listOrderStatus": "EXECUTING",
+                "listClientOrderId": "wuB13fmulKj3YjdqWEcsnp",
+                "transactionTime": 1565246080644_u64,
+                "symbol": "LTCBTC",
+                "orders": [
+                    { "symbol": "LTCBTC", "orderId": 4_u64, "clientOrderId": "r3EH2N76dHfLoSZWIUw1bT" },
+                    { "symbol": "LTCBTC", "orderId": 5_u64, "clientOrderId": "Cv1SnyPD3qhqpbjpYEHbd2" }
+                ]
+            }));
+        })
+        .await;
+
+    let client = BinanceClient::builder()
+        .api_key("key")
+        .api_secret("secret")
+        .fixed_timestamp(1_717_171_717_171)
+        .recv_window(5_000)
+        .rest_base_url(server.base_url())
+        .build()
+        .expect("client should build");
+
+    let response = client
+        .order_list(&OrderListQueryRequest::by_order_list_id(31))
+        .await
+        .expect("request should succeed");
+
+    mock.assert_async().await;
+    assert_eq!(response.order_list_id, 31);
+    assert_eq!(response.symbol, "LTCBTC");
+}
+
+#[tokio::test]
+async fn fetches_all_order_lists() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(GET)
+                .path("/api/v3/allOrderList")
+                .header("x-mbx-apikey", "key")
+                .query_param("fromId", "30")
+                .query_param("limit", "2")
+                .query_param("recvWindow", "5000")
+                .query_param("timestamp", "1717171717171");
+            then.status(200).json_body(json!([
+                {
+                    "orderListId": 31_u64,
+                    "contingencyType": "OCO",
+                    "listStatusType": "ALL_DONE",
+                    "listOrderStatus": "ALL_DONE",
+                    "listClientOrderId": "abc",
+                    "transactionTime": 1565246080644_u64,
+                    "symbol": "LTCBTC",
+                    "orders": []
+                },
+                {
+                    "orderListId": 32_u64,
+                    "contingencyType": "OCO",
+                    "listStatusType": "ALL_DONE",
+                    "listOrderStatus": "ALL_DONE",
+                    "listClientOrderId": "def",
+                    "transactionTime": 1565246081644_u64,
+                    "symbol": "ETHBTC",
+                    "orders": []
+                }
+            ]));
+        })
+        .await;
+
+    let client = BinanceClient::builder()
+        .api_key("key")
+        .api_secret("secret")
+        .fixed_timestamp(1_717_171_717_171)
+        .recv_window(5_000)
+        .rest_base_url(server.base_url())
+        .build()
+        .expect("client should build");
+
+    let response = client
+        .all_order_lists(Some(30), None, None, Some(2))
+        .await
+        .expect("request should succeed");
+
+    mock.assert_async().await;
+    assert_eq!(response.len(), 2);
+    assert_eq!(response[1].order_list_id, 32);
+}
+
+#[tokio::test]
+async fn cancels_order_list() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(httpmock::Method::DELETE)
+                .path("/api/v3/orderList")
+                .header("x-mbx-apikey", "key")
+                .query_param("symbol", "LTCBTC")
+                .query_param("orderListId", "31")
+                .query_param("recvWindow", "5000")
+                .query_param("timestamp", "1717171717171");
+            then.status(200).json_body(json!({
+                "orderListId": 31_u64,
+                "contingencyType": "OCO",
+                "listStatusType": "ALL_DONE",
+                "listOrderStatus": "ALL_DONE",
+                "listClientOrderId": "wuB13fmulKj3YjdqWEcsnp",
+                "transactionTime": 1565246080644_u64,
+                "symbol": "LTCBTC",
+                "orders": [
+                    { "symbol": "LTCBTC", "orderId": 4_u64, "clientOrderId": "r3EH2N76dHfLoSZWIUw1bT" },
+                    { "symbol": "LTCBTC", "orderId": 5_u64, "clientOrderId": "Cv1SnyPD3qhqpbjpYEHbd2" }
+                ]
+            }));
+        })
+        .await;
+
+    let client = BinanceClient::builder()
+        .api_key("key")
+        .api_secret("secret")
+        .fixed_timestamp(1_717_171_717_171)
+        .recv_window(5_000)
+        .rest_base_url(server.base_url())
+        .build()
+        .expect("client should build");
+
+    let response = client
+        .cancel_order_list(&CancelOrderListRequest::by_order_list_id("LTCBTC", 31))
+        .await
+        .expect("request should succeed");
+
+    mock.assert_async().await;
+    assert_eq!(response.order_list_id, 31);
+    assert_eq!(response.list_status_type, "ALL_DONE");
+}
+
+#[tokio::test]
+async fn cancels_all_open_orders_for_symbol() {
+    let server = MockServer::start_async().await;
+    let mock = server
+        .mock_async(|when, then| {
+            when.method(httpmock::Method::DELETE)
+                .path("/api/v3/openOrders")
+                .header("x-mbx-apikey", "key")
+                .query_param("symbol", "BTCUSDT")
+                .query_param("recvWindow", "5000")
+                .query_param("timestamp", "1717171717171");
+            then.status(200).json_body(json!([
+                {
+                    "symbol": "BTCUSDT",
+                    "origClientOrderId": "E6APeyTJvkMvLMYMqu1KQ4",
+                    "orderId": 11_u64,
+                    "orderListId": -1,
+                    "clientOrderId": "pXLV6Hz6mprAcVYpVMTGgx",
+                    "price": "0.089853",
+                    "origQty": "0.178622",
+                    "executedQty": "0.000000",
+                    "cummulativeQuoteQty": "0.000000",
+                    "status": "CANCELED",
+                    "timeInForce": "GTC",
+                    "type": "LIMIT",
+                    "side": "BUY"
+                }
+            ]));
+        })
+        .await;
+
+    let client = BinanceClient::builder()
+        .api_key("key")
+        .api_secret("secret")
+        .fixed_timestamp(1_717_171_717_171)
+        .recv_window(5_000)
+        .rest_base_url(server.base_url())
+        .build()
+        .expect("client should build");
+
+    let response = client
+        .cancel_open_orders("BTCUSDT")
+        .await
+        .expect("request should succeed");
+
+    mock.assert_async().await;
+    assert_eq!(response.as_array().expect("array response").len(), 1);
 }

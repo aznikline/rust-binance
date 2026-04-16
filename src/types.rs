@@ -177,6 +177,8 @@ pub struct OrderListSummary {
     pub transaction_time: u64,
     pub symbol: String,
     pub orders: Vec<OrderListOrder>,
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -343,6 +345,20 @@ pub struct MyTradesRequest {
     pub limit: Option<u16>,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct OrderListQueryRequest {
+    pub order_list_id: Option<u64>,
+    pub orig_client_order_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CancelOrderListRequest {
+    pub symbol: String,
+    pub order_list_id: Option<u64>,
+    pub list_client_order_id: Option<String>,
+    pub new_client_order_id: Option<String>,
+}
+
 impl AggregateTradeRequest {
     pub fn new(symbol: impl Into<String>) -> Self {
         Self {
@@ -501,6 +517,74 @@ impl ToParams for MyTradesRequest {
         }
         if let Some(value) = self.limit {
             params.push(("limit".to_string(), value.to_string()));
+        }
+        params
+    }
+}
+
+impl OrderListQueryRequest {
+    pub fn by_order_list_id(order_list_id: u64) -> Self {
+        Self {
+            order_list_id: Some(order_list_id),
+            orig_client_order_id: None,
+        }
+    }
+
+    pub fn by_client_order_id(orig_client_order_id: impl Into<String>) -> Self {
+        Self {
+            order_list_id: None,
+            orig_client_order_id: Some(orig_client_order_id.into()),
+        }
+    }
+}
+
+impl ToParams for OrderListQueryRequest {
+    fn to_params(&self) -> Vec<(String, String)> {
+        let mut params = Vec::new();
+        if let Some(value) = self.order_list_id {
+            params.push(("orderListId".to_string(), value.to_string()));
+        }
+        if let Some(value) = &self.orig_client_order_id {
+            params.push(("origClientOrderId".to_string(), value.clone()));
+        }
+        params
+    }
+}
+
+impl CancelOrderListRequest {
+    pub fn by_order_list_id(symbol: impl Into<String>, order_list_id: u64) -> Self {
+        Self {
+            symbol: symbol.into(),
+            order_list_id: Some(order_list_id),
+            list_client_order_id: None,
+            new_client_order_id: None,
+        }
+    }
+
+    pub fn by_client_order_id(
+        symbol: impl Into<String>,
+        list_client_order_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            symbol: symbol.into(),
+            order_list_id: None,
+            list_client_order_id: Some(list_client_order_id.into()),
+            new_client_order_id: None,
+        }
+    }
+}
+
+impl ToParams for CancelOrderListRequest {
+    fn to_params(&self) -> Vec<(String, String)> {
+        let mut params = vec![("symbol".to_string(), self.symbol.clone())];
+        if let Some(value) = self.order_list_id {
+            params.push(("orderListId".to_string(), value.to_string()));
+        }
+        if let Some(value) = &self.list_client_order_id {
+            params.push(("listClientOrderId".to_string(), value.clone()));
+        }
+        if let Some(value) = &self.new_client_order_id {
+            params.push(("newClientOrderId".to_string(), value.clone()));
         }
         params
     }

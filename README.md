@@ -30,6 +30,10 @@ This repository focuses on the most valuable Spot REST surface first instead of 
   - `my_trades`
   - `current_order_count`
   - `open_order_lists`
+  - `order_list`
+  - `all_order_lists`
+  - `cancel_order_list`
+  - `cancel_open_orders`
   - `open_orders`
   - `create_order`
   - `cancel_order`

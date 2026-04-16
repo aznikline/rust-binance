@@ -9,10 +9,10 @@ use sha2::Sha256;
 use crate::error::{BinanceApiError, Error};
 use crate::types::{
     AccountBalance, AccountInformation, AccountTrade, AggregateTrade, AggregateTradeRequest,
-    AllOrdersRequest, AveragePrice, BookTicker, CancelOrderRequest, CreateOrderRequest,
-    ExchangeInfo, Kline, KlinesRequest, MyTradesRequest, OrderBook, OrderCountUsage,
-    OrderListSummary, OrderQueryRequest, OrderResponse, PriceTicker, ServerTimeResponse,
-    Ticker24hr, ToParams, Trade,
+    AllOrdersRequest, AveragePrice, BookTicker, CancelOrderListRequest, CancelOrderRequest,
+    CreateOrderRequest, ExchangeInfo, Kline, KlinesRequest, MyTradesRequest, OrderBook,
+    OrderCountUsage, OrderListQueryRequest, OrderListSummary, OrderQueryRequest, OrderResponse,
+    PriceTicker, ServerTimeResponse, Ticker24hr, ToParams, Trade,
 };
 
 type HmacSha256 = Hmac<Sha256>;
@@ -215,6 +215,45 @@ impl BinanceClient {
 
     pub async fn open_order_lists(&self) -> Result<Vec<OrderListSummary>, Error> {
         self.send_signed(Method::GET, "/api/v3/openOrderList", Vec::new())
+            .await
+    }
+
+    pub async fn order_list(
+        &self,
+        request: &OrderListQueryRequest,
+    ) -> Result<OrderListSummary, Error> {
+        self.send_signed(Method::GET, "/api/v3/orderList", request.to_params())
+            .await
+    }
+
+    pub async fn all_order_lists(
+        &self,
+        from_id: Option<u64>,
+        start_time: Option<u64>,
+        end_time: Option<u64>,
+        limit: Option<u16>,
+    ) -> Result<Vec<OrderListSummary>, Error> {
+        let params = optional_params([
+            ("fromId", from_id.map(|value| value.to_string())),
+            ("startTime", start_time.map(|value| value.to_string())),
+            ("endTime", end_time.map(|value| value.to_string())),
+            ("limit", limit.map(|value| value.to_string())),
+        ]);
+        self.send_signed(Method::GET, "/api/v3/allOrderList", params)
+            .await
+    }
+
+    pub async fn cancel_order_list(
+        &self,
+        request: &CancelOrderListRequest,
+    ) -> Result<OrderListSummary, Error> {
+        self.send_signed(Method::DELETE, "/api/v3/orderList", request.to_params())
+            .await
+    }
+
+    pub async fn cancel_open_orders(&self, symbol: &str) -> Result<serde_json::Value, Error> {
+        let params = optional_params([("symbol", Some(symbol.to_owned()))]);
+        self.send_signed(Method::DELETE, "/api/v3/openOrders", params)
             .await
     }
 
