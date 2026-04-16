@@ -238,3 +238,43 @@ fn parses_subscription_wrapped_user_data_event() {
         other => panic!("unexpected event: {other:?}"),
     }
 }
+
+#[test]
+fn signs_ws_api_session_logon_request() {
+    let ws_api = BinanceWebsocketApiClient::builder()
+        .api_key("key")
+        .api_secret("secret")
+        .fixed_timestamp(1_717_171_717_171)
+        .recv_window(5_000)
+        .build();
+
+    let request = ws_api
+        .signed_request("req-3", "session.logon", serde_json::json!({}))
+        .expect("signed request should build");
+    let value = serde_json::to_value(&request).expect("request should serialize");
+
+    assert_eq!(value["id"], "req-3");
+    assert_eq!(value["method"], "session.logon");
+    assert_eq!(value["params"]["apiKey"], "key");
+    assert_eq!(value["params"]["recvWindow"], 5000);
+    assert_eq!(value["params"]["timestamp"], 1717171717171_u64);
+    assert_eq!(
+        value["params"]["signature"],
+        "66260eb1fe51f30b376af48de319274b952460f1dc9531c4cf35bcadca2d061f"
+    );
+}
+
+#[test]
+fn parses_user_data_subscribe_response() {
+    let response: BinanceWebsocketApiResponse<serde_json::Value> = serde_json::from_str(
+        r#"{
+            "id":"req-4",
+            "status":200,
+            "result":{"subscriptionId":42}
+        }"#,
+    )
+    .expect("response should parse");
+
+    assert_eq!(response.id, "req-4");
+    assert_eq!(response.result["subscriptionId"], 42);
+}

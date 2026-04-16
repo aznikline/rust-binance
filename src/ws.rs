@@ -1,21 +1,35 @@
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use futures_util::{SinkExt, StreamExt};
+use hmac::{Hmac, Mac};
+use serde::de::DeserializeOwned;
+use sha2::Sha256;
 use tokio::net::TcpStream;
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
 
 use crate::{Error, KlineInterval};
 
 const DEFAULT_WS_BASE_URL: &str = "wss://stream.binance.com:9443";
 const DEFAULT_WS_API_BASE_URL: &str = "wss://ws-api.binance.com:443/ws-api/v3";
+const DEFAULT_RECV_WINDOW: u64 = 5_000;
 
 pub type WsConnection = WebSocketStream<MaybeTlsStream<TcpStream>>;
+type HmacSha256 = Hmac<Sha256>;
+type TimestampProvider = Arc<dyn Fn() -> u64 + Send + Sync>;
 
 #[derive(Debug, Clone)]
 pub struct BinanceWebsocketClient {
     base_url: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct BinanceWebsocketApiClient {
     base_url: String,
+    api_key: Option<String>,
+    api_secret: Option<String>,
+    recv_window: u64,
+    timestamp_provider: TimestampProvider,
 }
 
 #[derive(Debug, Clone)]
@@ -23,9 +37,13 @@ pub struct BinanceWebsocketClientBuilder {
     base_url: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct BinanceWebsocketApiClientBuilder {
     base_url: String,
+    api_key: Option<String>,
+    api_secret: Option<String>,
+    recv_window: Option<u64>,
+    timestamp_provider: Option<TimestampProvider>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -276,6 +294,10 @@ impl BinanceWebsocketClient {
     pub fn api_builder() -> BinanceWebsocketApiClientBuilder {
         BinanceWebsocketApiClientBuilder {
             base_url: DEFAULT_WS_API_BASE_URL.to_string(),
+            api_key: None,
+            api_secret: None,
+            recv_window: None,
+            timestamp_provider: None,
         }
     }
 
@@ -340,6 +362,10 @@ impl BinanceWebsocketApiClient {
     pub fn builder() -> BinanceWebsocketApiClientBuilder {
         BinanceWebsocketApiClientBuilder {
             base_url: DEFAULT_WS_API_BASE_URL.to_string(),
+            api_key: None,
+            api_secret: None,
+            recv_window: None,
+            timestamp_provider: None,
         }
     }
 
@@ -351,6 +377,83 @@ impl BinanceWebsocketApiClient {
         let (stream, _) = connect_async(self.base_url()).await?;
         Ok(stream)
     }
+
+    pub fn signed_request(
+        &self,
+        id: impl Into<String>,
+        method: impl Into<String>,
+        params: serde_json::Value,
+    ) -> Result<BinanceWebsocketApiRequest<serde_json::Value>, Error> {
+        let api_key = self.api_key.as_deref().ok_or(Error::MissingCredentials)?;
+        let api_secret = self.api_secret.as_deref().ok_or(Error::MissingCredentials)?;
+        let mut params = ensure_object(params);
+        params.entry("apiKey".to_string()).or_insert(api_key.into());
+        params
+            .entry("recvWindow".to_string())
+            .or_insert(self.recv_window.into());
+        params
+            .entry("timestamp".to_string())
+            .or_insert((self.timestamp_provider)().into());
+
+        let signature_payload = canonicalize_params(&params);
+        let signature = sign(api_secret, &signature_payload)?;
+        params.insert("signature".to_string(), signature.into());
+
+        Ok(BinanceWebsocketApiRequest {
+            id: id.into(),
+            method: method.into(),
+            params: Some(serde_json::Value::Object(params)),
+        })
+    }
+
+    pub fn session_logon_request(
+        &self,
+        id: impl Into<String>,
+    ) -> Result<BinanceWebsocketApiRequest<serde_json::Value>, Error> {
+        self.signed_request(id, "session.logon", serde_json::json!({}))
+    }
+
+    pub async fn send_request<T: serde::Serialize>(
+        &self,
+        connection: &mut WsConnection,
+        request: &T,
+    ) -> Result<(), Error> {
+        let payload = serde_json::to_string(request)?;
+        connection.send(Message::Text(payload.into())).await?;
+        Ok(())
+    }
+
+    pub async fn read_response<T: DeserializeOwned>(
+        &self,
+        connection: &mut WsConnection,
+    ) -> Result<T, Error> {
+        while let Some(message) = connection.next().await {
+            let message = message?;
+            match message {
+                Message::Text(text) => return Ok(serde_json::from_str(&text)?),
+                Message::Binary(bytes) => return Ok(serde_json::from_slice(&bytes)?),
+                Message::Ping(_) | Message::Pong(_) => continue,
+                Message::Close(_) => {
+                    return Err(tokio_tungstenite::tungstenite::Error::ConnectionClosed.into())
+                }
+                Message::Frame(_) => continue,
+            }
+        }
+        Err(tokio_tungstenite::tungstenite::Error::ConnectionClosed.into())
+    }
+
+    pub async fn request<T, R>(
+        &self,
+        connection: &mut WsConnection,
+        request: &T,
+    ) -> Result<R, Error>
+    where
+        T: serde::Serialize,
+        R: DeserializeOwned,
+    {
+        self.send_request(connection, request).await?;
+        self.read_response(connection).await
+    }
 }
 
 impl BinanceWebsocketApiClientBuilder {
@@ -359,9 +462,33 @@ impl BinanceWebsocketApiClientBuilder {
         self
     }
 
+    pub fn api_key(mut self, value: impl Into<String>) -> Self {
+        self.api_key = Some(value.into());
+        self
+    }
+
+    pub fn api_secret(mut self, value: impl Into<String>) -> Self {
+        self.api_secret = Some(value.into());
+        self
+    }
+
+    pub fn recv_window(mut self, value: u64) -> Self {
+        self.recv_window = Some(value);
+        self
+    }
+
+    pub fn fixed_timestamp(mut self, value: u64) -> Self {
+        self.timestamp_provider = Some(Arc::new(move || value));
+        self
+    }
+
     pub fn build(self) -> BinanceWebsocketApiClient {
         BinanceWebsocketApiClient {
             base_url: self.base_url,
+            api_key: self.api_key,
+            api_secret: self.api_secret,
+            recv_window: self.recv_window.unwrap_or(DEFAULT_RECV_WINDOW),
+            timestamp_provider: self.timestamp_provider.unwrap_or_else(default_timestamp_provider),
         }
     }
 }
@@ -405,4 +532,46 @@ impl BinanceWebsocketApiRequest<serde_json::Value> {
 
 fn normalize_symbol(symbol: &str) -> String {
     symbol.to_ascii_lowercase()
+}
+
+fn default_timestamp_provider() -> TimestampProvider {
+    Arc::new(|| {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_millis() as u64
+    })
+}
+
+fn ensure_object(value: serde_json::Value) -> serde_json::Map<String, serde_json::Value> {
+    match value {
+        serde_json::Value::Object(map) => map,
+        _ => serde_json::Map::new(),
+    }
+}
+
+fn canonicalize_params(params: &serde_json::Map<String, serde_json::Value>) -> String {
+    let mut pairs = params
+        .iter()
+        .map(|(key, value)| (key.clone(), json_value_to_param_string(value)))
+        .collect::<Vec<_>>();
+    pairs.sort_by(|left, right| left.0.cmp(&right.0));
+    serde_urlencoded::to_string(pairs).expect("ws api params should serialize")
+}
+
+fn json_value_to_param_string(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Null => String::new(),
+        serde_json::Value::Bool(v) => v.to_string(),
+        serde_json::Value::Number(v) => v.to_string(),
+        serde_json::Value::String(v) => v.clone(),
+        other => other.to_string(),
+    }
+}
+
+fn sign(secret: &str, payload: &str) -> Result<String, Error> {
+    let mut signer =
+        HmacSha256::new_from_slice(secret.as_bytes()).map_err(|_| Error::InvalidSecretKey)?;
+    signer.update(payload.as_bytes());
+    Ok(hex::encode(signer.finalize().into_bytes()))
 }

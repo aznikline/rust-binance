@@ -100,6 +100,7 @@ It is not yet aiming for full `python-binance` parity.
   - typed parsing for trade, bookTicker, kline, and core user-data events
   - websocket API base client and request/response envelopes
   - helpers for `userDataStream.subscribe` and `userDataStream.subscribe.listenToken`
+  - signed WS API request builder for flows like `session.logon`
 
 ## Example code
 
